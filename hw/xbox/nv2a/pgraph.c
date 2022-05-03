@@ -6146,12 +6146,6 @@ static void pgraph_bind_textures(NV2AState *d)
 
         nv2a_profile_inc_counter(NV2A_PROF_TEX_BIND);
 
-        if (!pg->texture_dirty[i] && pg->texture_binding[i]) {
-            glBindTexture(pg->texture_binding[i]->gl_target,
-                          pg->texture_binding[i]->gl_texture);
-            continue;
-        }
-
         NV2A_DPRINTF(" texture %d is format 0x%x, "
                         "off 0x%" HWADDR_PRIx " (r %d, %d or %d, %d, %d; %d%s),"
                         " filter %x %x, levels %d-%d %d bias %d\n",
@@ -6251,6 +6245,16 @@ static void pgraph_bind_textures(NV2AState *d)
         palette_data += palette_offset;
         hwaddr palette_vram_offset = palette_data - d->vram_ptr;
 
+        SurfaceBinding *surface = pgraph_surface_get(d, texture_vram_offset);
+        TextureBinding *tbind = pg->texture_binding[i];
+        if (!pg->texture_dirty[i] && tbind &&
+            (!surface || (!surface->draw_dirty &&
+                tbind->draw_time >= surface->draw_time))) {
+            glBindTexture(pg->texture_binding[i]->gl_target,
+                          pg->texture_binding[i]->gl_texture);
+            continue;
+        }
+
         size_t length = 0;
         if (f.linear) {
             assert(cubemap == false);
@@ -6315,7 +6319,6 @@ static void pgraph_bind_textures(NV2AState *d)
          * Check active surfaces to see if this texture was a render target
          */
         bool surf_to_tex = false;
-        SurfaceBinding *surface = pgraph_surface_get(d, texture_vram_offset);
         if (surface != NULL) {
             surf_to_tex = pgraph_check_surface_to_texture_compatibility(
                 surface, &state);
@@ -6406,7 +6409,9 @@ static void pgraph_bind_textures(NV2AState *d)
         TextureBinding *binding = key_out->binding;
         binding->refcnt++;
 
-        if (surf_to_tex && (binding->draw_time < surface->draw_time)) {
+        if (surf_to_tex &&
+            (surface->draw_dirty || binding->draw_time < surface->draw_time)) {
+
             NV2A_XPRINTF(DBG_SURFACES,
                 "Rendering surface @ %" HWADDR_PRIx " to texture (%dx%d)\n",
                 surface->vram_addr, surface->width, surface->height);
