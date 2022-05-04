@@ -2787,6 +2787,14 @@ DEF_METHOD(NV097, SET_BEGIN_END)
             glEndQuery(GL_SAMPLES_PASSED);
         }
 
+        pg->draw_time++;
+        if (pg->color_binding && pgraph_color_write_enabled(pg)) {
+            pg->color_binding->draw_time = pg->draw_time;
+        }
+        if (pg->zeta_binding && pgraph_zeta_write_enabled(pg)) {
+            pg->zeta_binding->draw_time = pg->draw_time;
+        }
+
         NV2A_GL_DGROUP_END();
     } else {
         NV2A_GL_DGROUP_BEGIN("NV097_SET_BEGIN_END: 0x%x", parameter);
@@ -6248,8 +6256,7 @@ static void pgraph_bind_textures(NV2AState *d)
         SurfaceBinding *surface = pgraph_surface_get(d, texture_vram_offset);
         TextureBinding *tbind = pg->texture_binding[i];
         if (!pg->texture_dirty[i] && tbind &&
-            (!surface || (!surface->draw_dirty &&
-                tbind->draw_time >= surface->draw_time))) {
+            (!surface || tbind->draw_time == surface->draw_time)) {
             glBindTexture(pg->texture_binding[i]->gl_target,
                           pg->texture_binding[i]->gl_texture);
             continue;
@@ -6409,8 +6416,7 @@ static void pgraph_bind_textures(NV2AState *d)
         TextureBinding *binding = key_out->binding;
         binding->refcnt++;
 
-        if (surf_to_tex &&
-            (surface->draw_dirty || binding->draw_time < surface->draw_time)) {
+        if (surf_to_tex && binding->draw_time < surface->draw_time) {
 
             NV2A_XPRINTF(DBG_SURFACES,
                 "Rendering surface @ %" HWADDR_PRIx " to texture (%dx%d)\n",
